@@ -79,4 +79,23 @@ def callback(indata, frames, times, status):
         • we do this to reduce the effect of white noise, which is essential to run a
         Harmonic Product Spectrum method"""
 
-        for 
+        for j in range(len(octave_bands)-1):
+            ind_start = int(octave_bands[j]/delta_freq)
+            ind_end = int(octave_bands[j+1]/delta_freq)
+            ind_end = ind_end if len(magnitudeSpec) > ind_end else len(magnitudeSpec)
+            avg_energy_per_freq = (np.linalg.norm(magnitudeSpec[ind_start:ind_end], ord = 2) ** 2) / (ind_end - ind_start)
+            avg_energy_per_freq = avg_energy_per_freq**0.5
+
+            for i in range(ind_start, ind_end):
+                magnitude_spec [i] = magnitude_spec[i] if magnitude_spec[i] > avg_energy_per_freq * white_noise_thres else 0
+
+
+        # interpolate the magnitude spectrum 
+        mag_spec_ipol = np.interp(np.arange(0, len(magnitude_spec), 1/num_hps), np.arange(0, len(magnitude_spec)), magnitude_spec)
+        mag_spec_ipol = mag_spec_ipol / np.linalg.norm(mag_spec_ipol, ord = 2)
+
+        hps_spec = copy.deepcopy(mag_spec_ipol)
+
+        # calculate the HPS
+        for i in range(num_hps):
+            
