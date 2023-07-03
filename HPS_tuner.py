@@ -41,7 +41,8 @@ def find_closest_note(pitch):
 
 
 hann_window = np.hanning(window_size)
-def callback(indata, frames, times, status):
+
+def callback(indata, frames, time, status):
     """
     calling input stream from sounddevice
     """
@@ -56,19 +57,20 @@ def callback(indata, frames, times, status):
         return
 
     if any(indata):
-        callback.window_samples = np.concatenate(callback.window_samples, indata[:,0]:)
+        callback.window_samples = np.concatenate((callback.window_samples, indata[:,0]))
+        callback.window_samples = callback.window_samples[len(indata[:,0]):]
 
         #skip if singal is too small
         signal_power = (np.linalg.norm(callback.window_samples, ord = 2) ** 2) / len(callback.window_samples)
         if signal_power < power_thres:
-            os.system("cls" if os.name = "nt" else "clear")
-            print("Closest notes: ....")
+            os.system("cls" if os.name == "nt" else "clear")
+            print("Closest note: ....")
             return
 
 
         # avoiding spectral leakage
         hann_samples = callback.window_samples * hann_window
-        magnitudeSpec = abs(scipy.fftpack.fft(hann_samples)[:len(hann_samples)//2])
+        magnitude_spec = abs(scipy.fftpack.fft(hann_samples)[:len(hann_samples)//2])
 
         # supress main humss
         for i in range(int(62/delta_freq)):
@@ -82,8 +84,8 @@ def callback(indata, frames, times, status):
         for j in range(len(octave_bands)-1):
             ind_start = int(octave_bands[j]/delta_freq)
             ind_end = int(octave_bands[j+1]/delta_freq)
-            ind_end = ind_end if len(magnitudeSpec) > ind_end else len(magnitudeSpec)
-            avg_energy_per_freq = (np.linalg.norm(magnitudeSpec[ind_start:ind_end], ord = 2) ** 2) / (ind_end - ind_start)
+            ind_end = ind_end if len(magnitude_spec) > ind_end else len(magnitude_spec)
+            avg_energy_per_freq = (np.linalg.norm(magnitude_spec[ind_start:ind_end], ord = 2) ** 2) / (ind_end - ind_start)
             avg_energy_per_freq = avg_energy_per_freq**0.5
 
             for i in range(ind_start, ind_end):
@@ -98,4 +100,36 @@ def callback(indata, frames, times, status):
 
         # calculate the HPS
         for i in range(num_hps):
-            
+            tmp_hps_spec = np.multiply(hps_spec[:int(np.ceil(len(mag_spec_ipol)/(i+1)))], mag_spec_ipol[::(i+1)])
+            if not any(tmp_hps_spec):
+                break
+            hps_spec = tmp_hps_spec
+
+        max_ind = np.argmax(hps_spec)
+        max_freq = max_ind * (sample_freq / window_size) / num_hps
+
+        closest_note, closest_pitch = find_closest_note(max_freq)
+        max_freq = round(max_freq, 1)
+        closest_pitch = round(closest_pitch, 1)
+
+        callback.noteBuffer.insert(0, closest_note)
+        callback.noteBuffer.pop()
+
+        os.system("cls" if os.name == "nt" else "clear")
+        if callback.noteBuffer.count(callback.noteBuffer[0]) == len(callback.noteBuffer):
+            print(f"Closest note: {closest_note} {max_freq}/{closest_pitch}")
+
+        else:
+            print("Closest notes: ....")
+    
+    else:
+        print("no input")
+
+try:
+    print("Starting Harmonic Product Spectrum Tuner :guitar: 🎸...")
+    with sd.InputStream(channels = 1, callback = callback, blocksize = window_step, samplerate = sample_freq):
+        while True:
+            time.sleep(0.5)
+
+except Exception as e:
+    print(str(e))
